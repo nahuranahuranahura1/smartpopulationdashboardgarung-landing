@@ -1,0 +1,529 @@
+import React, { useState, useEffect } from 'react';
+import { Download, Map, BarChart3, Users, BookOpen, ChevronDown, Activity, MapPin } from 'lucide-react';
+
+// --- MOCK DATA (Client-side JSON equivalent as per NFRs) ---
+const DISTRICT_DATA = {
+  all: {
+    name: "Kecamatan Garung",
+    population: 56412,
+    density: 842,
+    productiveAge: 64.2,
+    dependencyRatio: 45.8,
+    pyramid: [
+      { age: "65+", male: 1200, female: 1400 },
+      { age: "50-64", male: 3800, female: 4100 },
+      { age: "35-49", male: 5600, female: 5400 },
+      { age: "20-34", male: 6800, female: 6500 },
+      { age: "5-19", male: 6100, female: 5900 },
+      { age: "0-4", male: 2500, female: 2400 },
+    ],
+    growth: [
+      { year: 2019, pop: 54200, sector: 45 },
+      { year: 2020, pop: 54800, sector: 48 },
+      { year: 2021, pop: 55100, sector: 52 },
+      { year: 2022, pop: 55800, sector: 60 },
+      { year: 2023, pop: 56412, sector: 65 },
+    ]
+  },
+  garung: {
+    name: "Desa Garung",
+    population: 8215,
+    density: 1250,
+    productiveAge: 68.1,
+    dependencyRatio: 41.2,
+    pyramid: [
+      { age: "65+", male: 150, female: 180 },
+      { age: "50-64", male: 500, female: 550 },
+      { age: "35-49", male: 800, female: 780 },
+      { age: "20-34", male: 1100, female: 1050 },
+      { age: "5-19", male: 900, female: 850 },
+      { age: "0-4", male: 350, female: 340 },
+    ]
+  },
+  kuripan: {
+    name: "Desa Kuripan",
+    population: 4150,
+    density: 680,
+    productiveAge: 61.5,
+    dependencyRatio: 49.1,
+    pyramid: [
+      { age: "65+", male: 110, female: 130 },
+      { age: "50-64", male: 350, female: 380 },
+      { age: "35-49", male: 420, female: 410 },
+      { age: "20-34", male: 450, female: 430 },
+      { age: "5-19", male: 400, female: 380 },
+      { age: "0-4", male: 180, female: 170 },
+    ]
+  },
+  sendangsari: {
+    name: "Desa Sendangsari",
+    population: 5890,
+    density: 910,
+    productiveAge: 63.8,
+    dependencyRatio: 46.5,
+    pyramid: [
+      { age: "65+", male: 130, female: 160 },
+      { age: "50-64", male: 410, female: 440 },
+      { age: "35-49", male: 580, female: 560 },
+      { age: "20-34", male: 690, female: 660 },
+      { age: "5-19", male: 610, female: 590 },
+      { age: "0-4", male: 260, female: 250 },
+    ]
+  }
+};
+
+// --- HELPER COMPONENTS ---
+
+// Animated Number Counter
+const AnimatedCounter = ({ end, duration = 1500, suffix = "", prefix = "" }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let startTime = null;
+    const animate = (currentTime) => {
+      if (!startTime) startTime = currentTime;
+      const progress = Math.min((currentTime - startTime) / duration, 1);
+      
+      // Easing function (easeOutExpo)
+      const easeProgress = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      
+      setCount(Math.floor(easeProgress * end));
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    requestAnimationFrame(animate);
+  }, [end, duration]);
+
+  return <span>{prefix}{count.toLocaleString('id-ID')}{suffix}</span>;
+};
+
+// Custom Age Pyramid Chart
+const AgePyramid = ({ data }) => {
+  const maxVal = Math.max(...data.flatMap(d => [d.male, d.female]));
+  
+  return (
+    <div className="w-full h-full flex flex-col font-sans">
+      <div className="flex justify-between mb-4 text-sm font-semibold text-gray-600">
+        <span className="text-[#0B3C5D]">Laki-laki</span>
+        <span className="text-[#F2A900]">Perempuan</span>
+      </div>
+      <div className="flex-1 flex flex-col gap-2 justify-center">
+        {data.map((row, idx) => (
+          <div key={idx} className="flex items-center group cursor-pointer relative">
+            {/* Tooltip */}
+            <div className="absolute opacity-0 group-hover:opacity-100 bg-white shadow-lg border border-gray-200 rounded p-2 text-xs z-10 -top-8 left-1/2 transform -translate-x-1/2 pointer-events-none transition-opacity duration-200">
+              {row.age} Tahun: {row.male + row.female} Jiwa
+            </div>
+            
+            {/* Male Bar (Left) */}
+            <div className="flex-1 flex justify-end pr-2">
+              <div 
+                className="h-6 bg-[#0B3C5D] opacity-80 group-hover:opacity-100 rounded-l transition-all duration-500 ease-out"
+                style={{ width: `${(row.male / maxVal) * 100}%` }}
+              ></div>
+            </div>
+            
+            {/* Axis Label */}
+            <div className="w-16 text-center text-xs font-bold text-gray-500 bg-gray-100 rounded py-1 z-0">
+              {row.age}
+            </div>
+            
+            {/* Female Bar (Right) */}
+            <div className="flex-1 pl-2">
+              <div 
+                className="h-6 bg-[#F2A900] opacity-80 group-hover:opacity-100 rounded-r transition-all duration-500 ease-out"
+                style={{ width: `${(row.female / maxVal) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Abstract Map Component
+const InteractiveMap = ({ selectedRegion, onSelectRegion }) => {
+  return (
+    <div className="w-full aspect-square md:aspect-[4/3] bg-blue-50/50 rounded-xl border-2 border-dashed border-blue-200 relative overflow-hidden flex items-center justify-center p-4">
+      <svg viewBox="0 0 400 400" className="w-full h-full drop-shadow-md">
+        {/* Placeholder styling for map paths - simulating a spatial layout */}
+        <g stroke="white" strokeWidth="2" className="transition-all duration-300">
+          {/* Desa Garung (Center) */}
+          <path 
+            d="M150,150 L250,120 L300,200 L220,280 L120,220 Z" 
+            fill={selectedRegion === 'all' || selectedRegion === 'garung' ? '#0B3C5D' : '#94a3b8'}
+            className="cursor-pointer hover:fill-[#125887] hover:drop-shadow-xl transition-all duration-300"
+            onClick={() => onSelectRegion('garung')}
+          />
+          {/* Desa Kuripan (Top Left) */}
+          <path 
+            d="M50,80 L150,150 L120,220 L40,180 Z" 
+            fill={selectedRegion === 'all' || selectedRegion === 'kuripan' ? '#186499' : '#cbd5e1'}
+            className="cursor-pointer hover:fill-[#207bbc] hover:drop-shadow-xl transition-all duration-300"
+            onClick={() => onSelectRegion('kuripan')}
+          />
+          {/* Desa Sendangsari (Right) */}
+          <path 
+            d="M250,120 L350,90 L380,180 L300,200 Z" 
+            fill={selectedRegion === 'all' || selectedRegion === 'sendangsari' ? '#207bbc' : '#cbd5e1'}
+            className="cursor-pointer hover:fill-[#2d96e0] hover:drop-shadow-xl transition-all duration-300"
+            onClick={() => onSelectRegion('sendangsari')}
+          />
+        </g>
+      </svg>
+      
+      {/* Map Labels */}
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <div className="relative w-full h-full max-w-[400px] max-h-[400px]">
+           <span className="absolute top-[40%] left-[45%] text-white font-bold text-sm bg-black/30 px-2 py-1 rounded backdrop-blur-sm">Garung</span>
+           <span className="absolute top-[35%] left-[15%] text-white font-bold text-xs bg-black/30 px-2 py-1 rounded backdrop-blur-sm">Kuripan</span>
+           <span className="absolute top-[30%] right-[15%] text-white font-bold text-xs bg-black/30 px-2 py-1 rounded backdrop-blur-sm">Sendangsari</span>
+        </div>
+      </div>
+      
+      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur p-2 rounded shadow text-xs flex flex-col gap-1">
+        <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#0B3C5D]"></div> Padat</span>
+        <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#186499]"></div> Sedang</span>
+        <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#207bbc]"></div> Lengang</span>
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN APPLICATION ---
+
+export default function App() {
+  const [selectedVillage, setSelectedVillage] = useState('all');
+  const [activeData, setActiveData] = useState(DISTRICT_DATA.all);
+
+  useEffect(() => {
+    setActiveData(DISTRICT_DATA[selectedVillage]);
+  }, [selectedVillage]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
+      
+      {/* SECTION 1: Navigation Header */}
+      <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            {/* Logo area */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#0B3C5D] flex items-center justify-center text-white font-bold tracking-tighter">
+                SSK
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-[#0B3C5D] leading-tight">GarungStat</h1>
+                <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider hidden sm:block">Pusat Data Kependudukan</p>
+              </div>
+            </div>
+            
+            {/* Desktop Links */}
+            <div className="hidden md:flex space-x-8">
+              <a href="#beranda" className="text-gray-900 font-medium hover:text-[#F2A900] transition">Beranda</a>
+              <a href="#peta" className="text-gray-500 font-medium hover:text-[#F2A900] transition">Peta Kepadatan</a>
+              <a href="#analisis" className="text-gray-500 font-medium hover:text-[#F2A900] transition">Analisis Lintas Ilmu</a>
+            </div>
+
+            {/* Action Button */}
+            <button className="flex items-center gap-2 bg-[#0B3C5D] hover:bg-[#082a42] text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md">
+              <Download size={16} />
+              <span className="hidden sm:inline">Unduh Laporan PDF</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* SECTION 2: Hero Section */}
+      <section id="beranda" className="relative bg-[#0B3C5D] overflow-hidden">
+        {/* Abstract Background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid-pattern)" />
+          </svg>
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight mb-6">
+            Membaca Data, <br className="hidden md:block" />
+            <span className="text-[#F2A900]">Memahami Dinamika Garung.</span>
+          </h1>
+          <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-blue-100 mb-10 leading-relaxed">
+            Selamat datang di <strong className="text-white">GarungStat</strong>. Platform visualisasi data kependudukan pintar garapan Tim Proyek Lintas Disiplin SMA N 1 Wonosobo—menggabungkan Geografi, Sosiologi, Matematika, dan Informatika.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <a href="#dashboard" className="inline-flex justify-center items-center px-8 py-3 border border-transparent text-base font-bold rounded-lg text-[#0B3C5D] bg-[#F2A900] hover:bg-yellow-400 shadow-lg transition-transform hover:scale-105">
+              Mulai Jelajahi Data
+            </a>
+            <button className="inline-flex justify-center items-center px-8 py-3 border-2 border-white/30 text-base font-bold rounded-lg text-white hover:bg-white/10 backdrop-blur-sm transition">
+              Pelajari Program SSK
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3: High-Level KPI Blocks */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Card 1: Math/Stats */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-[#0B3C5D] hover:-translate-y-1 transition-transform">
+            <div className="flex justify-between items-start mb-2">
+              <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Total Penduduk</p>
+              <Users size={20} className="text-[#0B3C5D]" />
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 my-1">
+              <AnimatedCounter end={activeData.population} />
+            </h3>
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Matematika/Statistik</span>
+              <span className="text-xs text-gray-400">(Live Est.)</span>
+            </div>
+          </div>
+
+          {/* Card 2: Geography */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-[#207bbc] hover:-translate-y-1 transition-transform">
+            <div className="flex justify-between items-start mb-2">
+              <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Kepadatan</p>
+              <MapPin size={20} className="text-[#207bbc]" />
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 my-1">
+              <AnimatedCounter end={activeData.density} suffix=" Jiwa/km²" />
+            </h3>
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">Geografi</span>
+              <span className="text-xs text-gray-400">Distribusi Spasial</span>
+            </div>
+          </div>
+
+          {/* Card 3: Sociology (Demographic Bonus) */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-[#F2A900] hover:-translate-y-1 transition-transform">
+            <div className="flex justify-between items-start mb-2">
+              <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Usia Produktif</p>
+              <Activity size={20} className="text-[#F2A900]" />
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 my-1">
+              <AnimatedCounter end={activeData.productiveAge} suffix="%" />
+            </h3>
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">Sosiologi</span>
+              <span className="text-xs text-gray-400">Bonus Demografi</span>
+            </div>
+          </div>
+
+          {/* Card 4: Sociology/Math */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-red-500 hover:-translate-y-1 transition-transform">
+            <div className="flex justify-between items-start mb-2">
+              <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Rasio Beban Tgn.</p>
+              <BarChart3 size={20} className="text-red-500" />
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 my-1">
+              <AnimatedCounter end={activeData.dependencyRatio} />
+            </h3>
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+              <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded">Lintas Ilmu</span>
+              <span className="text-xs text-gray-400">Struktur Sosial</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* SECTION 4: The Analytic Core */}
+      <section id="dashboard" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-8 border-b border-gray-200 pb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-[#0B3C5D] flex items-center gap-2">
+              <Map className="text-[#F2A900]" />
+              Pusat Kendali Analitik
+            </h2>
+            <p className="text-gray-500 mt-1">Filter data berdasarkan wilayah administratif desa.</p>
+          </div>
+          
+          {/* Dynamic Filter */}
+          <div className="relative mt-4 md:mt-0 w-full md:w-64">
+            <select 
+              className="w-full appearance-none bg-white border border-gray-300 text-gray-700 py-3 px-4 pr-8 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0B3C5D] focus:border-transparent font-medium cursor-pointer"
+              value={selectedVillage}
+              onChange={(e) => setSelectedVillage(e.target.value)}
+            >
+              <option value="all">Semua Desa (Kec. Garung)</option>
+              <option value="garung">Desa Garung</option>
+              <option value="kuripan">Desa Kuripan</option>
+              <option value="sendangsari">Desa Sendangsari</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+              <ChevronDown size={16} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Visual Box A: Map (Geography) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col h-[500px]">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Peta Kepadatan Choropleth</h3>
+              <p className="text-sm text-gray-500">Fokus Disiplin: Geografi & Tata Ruang</p>
+            </div>
+            <div className="flex-1 w-full relative">
+               <InteractiveMap selectedRegion={selectedVillage} onSelectRegion={setSelectedVillage} />
+            </div>
+          </div>
+
+          {/* Visual Box B: Age Pyramid (Sociology/Math) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col h-[500px]">
+             <div className="mb-4 flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Piramida Penduduk</h3>
+                <p className="text-sm text-gray-500">Fokus Disiplin: Sosiologi & Statistika</p>
+              </div>
+              <div className="bg-[#0B3C5D]/10 text-[#0B3C5D] px-3 py-1 rounded-full text-xs font-bold">
+                {activeData.name}
+              </div>
+            </div>
+            
+            <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 flex items-center justify-center">
+              {/* Custom SVG/Div Pyramid Component */}
+              <AgePyramid data={activeData.pyramid} />
+            </div>
+            
+            <div className="mt-4 text-xs text-gray-500 flex items-start gap-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
+              <BookOpen size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              <p>Bentuk piramida menunjukkan struktur demografi. Dasar yang lebar (Ekspansif) menandakan angka kelahiran tinggi, sering dibahas dalam bab <strong>Dinamika Penduduk</strong>.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 5: The Cross-Disciplinary Nexus */}
+      <section id="analisis" className="bg-[#0B3C5D] py-16 relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-[#F2A900] opacity-10 blur-3xl"></div>
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 rounded-full bg-blue-400 opacity-20 blur-3xl"></div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-12">
+             <h2 className="text-3xl font-bold text-white mb-4">Sintesis Lintas Ilmu</h2>
+             <div className="w-16 h-1 bg-[#F2A900] mx-auto rounded-full"></div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Callout Box */}
+            <div className="lg:col-span-5">
+              <div className="bg-white rounded-2xl p-8 shadow-2xl relative">
+                <div className="absolute -top-4 -left-4 w-12 h-12 bg-[#F2A900] rounded-xl flex items-center justify-center shadow-lg transform rotate-12">
+                  <BookOpen className="text-white" size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-4 mt-2">Kenapa Data Ini Penting?</h3>
+                <div className="space-y-4 text-gray-600 leading-relaxed">
+                  <p>
+                    Secara <strong className="text-amber-600 bg-amber-50 px-1 rounded">Sosiologis</strong>, tingginya usia produktif di Garung adalah peluang emas (Bonus Demografi). 
+                  </p>
+                  <p>
+                    Namun, secara <strong className="text-blue-600 bg-blue-50 px-1 rounded">Geografis</strong>, peningkatan populasi di lereng Dieng menuntut tata ruang yang bijak agar lahan pertanian tetap produktif dan aman dari bencana.
+                  </p>
+                  <p>
+                    GarungStat menggunakan pendekatan <strong className="text-emerald-600 bg-emerald-50 px-1 rounded">Matematika</strong> untuk memproyeksikan tren ini guna perencanaan tata kota 5 tahun ke depan.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Supporting Graphic (Custom Combined Chart) */}
+            <div className="lg:col-span-7">
+               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                  <h4 className="text-white font-semibold mb-6 flex justify-between items-center">
+                    Proyeksi Pertumbuhan vs Kapasitas Sektor (2019-2023)
+                    <span className="text-xs bg-white/20 px-2 py-1 rounded">Mock Data</span>
+                  </h4>
+                  
+                  {/* Custom CSS Combination Chart */}
+                  <div className="h-64 flex items-end justify-between gap-2 relative mt-10">
+                    {/* Y-Axis Line */}
+                    <div className="absolute left-0 top-0 bottom-0 w-px bg-white/20"></div>
+                    
+                    {/* SVG Line Overlay for Population Growth */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
+                      <polyline 
+                        points="10%,70% 30%,65% 50%,60% 70%,50% 90%,40%" 
+                        fill="none" 
+                        stroke="#F2A900" 
+                        strokeWidth="4" 
+                        strokeLinejoin="round" 
+                        className="drop-shadow-md"
+                      />
+                      {/* Dots on line */}
+                      <circle cx="10%" cy="70%" r="4" fill="#fff" stroke="#F2A900" strokeWidth="2"/>
+                      <circle cx="30%" cy="65%" r="4" fill="#fff" stroke="#F2A900" strokeWidth="2"/>
+                      <circle cx="50%" cy="60%" r="4" fill="#fff" stroke="#F2A900" strokeWidth="2"/>
+                      <circle cx="70%" cy="50%" r="4" fill="#fff" stroke="#F2A900" strokeWidth="2"/>
+                      <circle cx="90%" cy="40%" r="4" fill="#fff" stroke="#F2A900" strokeWidth="2"/>
+                    </svg>
+
+                    {/* Bars for Sector Capacity */}
+                    {DISTRICT_DATA.all.growth.map((data, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center group relative z-10">
+                        {/* Tooltip */}
+                        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-white text-gray-900 text-xs py-1 px-2 rounded shadow transition-opacity whitespace-nowrap pointer-events-none">
+                          Kapasitas: {data.sector}%<br/>Pop: {data.pop.toLocaleString('id-ID')}
+                        </div>
+                        {/* Bar */}
+                        <div 
+                          className="w-3/4 max-w-[40px] bg-blue-400/50 hover:bg-blue-400/80 rounded-t-sm transition-all duration-300"
+                          style={{ height: `${data.sector}%` }}
+                        ></div>
+                        {/* X-Axis Label */}
+                        <div className="text-white/70 text-xs mt-2 font-medium">{data.year}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex justify-center gap-6 mt-6 text-sm">
+                    <div className="flex items-center gap-2 text-white/80">
+                      <div className="w-4 h-4 bg-blue-400/50 rounded-sm"></div>
+                      Kapasitas Sektor (%)
+                    </div>
+                    <div className="flex items-center gap-2 text-white/80">
+                      <div className="w-4 h-1 bg-[#F2A900]"></div>
+                      Tren Populasi
+                    </div>
+                  </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 6: Footer */}
+      <footer className="bg-gray-900 text-gray-400 py-12 border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+          
+          <div className="text-center md:text-left">
+            <h2 className="text-2xl font-bold text-white tracking-tighter mb-2">GarungStat<span className="text-[#F2A900]">.</span></h2>
+            <p className="text-sm max-w-sm">
+              Dibangun dengan bangga oleh Kelompok 3, Kelas XI, SMA N 1 Wonosobo untuk <strong>Proyek Lintas Disiplin</strong> & Sekolah Siaga Kependudukan.
+            </p>
+          </div>
+
+          <div className="text-sm text-center md:text-right bg-gray-800 p-4 rounded-lg">
+            <p className="font-semibold text-gray-300 mb-1">Tata Kelola Data (Data Governance)</p>
+            <p className="text-xs">
+              Sumber primer: BPS Kabupaten Wonosobo & Kecamatan Garung Dalam Angka.<br/>
+              *Data di atas adalah simulasi untuk keperluan demonstrasi edukasi.
+            </p>
+          </div>
+
+        </div>
+      </footer>
+    </div>
+  );
+}
